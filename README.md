@@ -1,2 +1,2 @@
 # Checkpoint
-Checkpoint firewall management module
+Checkpoint firewall command line management module
