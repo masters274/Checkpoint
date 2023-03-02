@@ -1,5 +1,3 @@
-# TODO: Create service object
-# TODO: NAT on host objects, via param and pipeline
 
 #region System Commands
 
