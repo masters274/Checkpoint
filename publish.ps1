@@ -1,12 +1,16 @@
 
 $modulePath = "$PSScriptRoot\CheckPoint"
 
-$requiredModules = @('core', 'Posh-SSH')
+$manifest = Import-PowerShellDataFile -Path "$modulePath\*.psd1"
 
-foreach ($mod in $requiredModules) {
-    $module = Get-Module -Name $mod -ListAvailable
-    if ($module -eq $null) {
-        Install-Module -Name $mod -Force -Scope CurrentUser
+$requiredModules = $manifest.RequiredModules.ModuleName
+
+if ($requiredModules) { # Test-ModuleManifest will fail if RequiredModules are not on the deployment machine
+    foreach ($mod in $requiredModules) {
+        $module = Get-Module -Name $mod -ListAvailable
+        if ($null -eq $module) {
+            Install-Module -Name $mod -Force -Scope CurrentUser
+        }
     }
 }
 
