@@ -1,5 +1,3 @@
-#requires -Version 3.0 -Modules Posh-SSH, core
-
 # TODO: Create service object
 # TODO: NAT on host objects, via param and pipeline
 
