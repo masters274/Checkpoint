@@ -1,21 +1,19 @@
-#requires -Version 3.0 -Modules core, Posh-SSH
+#requires -Version 3.0 -Modules Posh-SSH, core
 
 # TODO: Create service object
 # TODO: NAT on host objects, via param and pipeline
 
-#region System commands
+#region System Commands
 
 
-Function Get-CheckPointActiveShell
-{
-    Param
-    (
-        [Parameter(Mandatory=$true, HelpMessage='IP or hostname of the firewall')]
+Function Get-CheckPointActiveShell {
+    Param (
+        [Parameter(Mandatory = $true, HelpMessage = 'IP or hostname of the firewall')]
         [String] $Firewall,
         
-        [Parameter(Mandatory=$true, HelpMessage='Creds for user with clish shell')]
-        
-        [PSCredential] [System.Management.Automation.Credential()] $Credential
+        [Parameter(Mandatory = $true, HelpMessage = 'Credentials for managing workstations')]
+        [System.Management.Automation.Credential()]
+        [PSCredential] $Credential
     )
     
     $strCommand = 'echo $SHELL'
@@ -27,12 +25,10 @@ Function Get-CheckPointActiveShell
     
     $retVal = Invoke-SSHCommand -SessionId $objSession.SessionId -Command $strCommand
     
-    If ($retVal.Output -match $strFailed)
-    {
+    If ($retVal.Output -match $strFailed) {
         Return 'CliSH'
     }
-    Else
-    {
+    Else {
         $retVal.Output
     }
     
@@ -41,8 +37,8 @@ Function Get-CheckPointActiveShell
 }
 
 
-Function Get-CheckpointVpnActiveUser
-{ # Get the count or details of all users connected via VPN
+Function Get-CheckpointVpnActiveUser {
+    # Get the count or details of all users connected via VPN
     # Get all the connected users, and their data [UserName, UserDN, PeerLast, Expires]
     # fw tab -t userc_users -f | sed 's/;/\n/g'
     
@@ -51,24 +47,23 @@ Function Get-CheckpointVpnActiveUser
 	
     Param
     (
-        [Parameter(Mandatory=$true, Position=0,
-        HelpMessage='Firewall')]
+        [Parameter(Mandatory = $true, Position = 0,
+            HelpMessage = 'Firewall')]
         [Alias('Firewall')]
         [String] $Server,
         
-        [Parameter(Mandatory=$true, Position=1,
-        HelpMessage='Credentials to connect to your firewall')]
+        [Parameter(Mandatory = $true, Position = 1,
+            HelpMessage = 'Credentials to connect to your firewall')]
         [PSCredential] [System.Management.Automation.Credential()] $Credential
     )
     
-    Begin
-    {
+    Begin {
         # Debugging for scripts
         $Script:boolDebug = $PSBoundParameters.Debug.IsPresent
         
         # List of required modules for this function
         $arrayModulesNeeded = (
-            'Posh-SSH','core'
+            'Posh-SSH', 'core'
         )
         
         # Verify and load required modules
@@ -76,8 +71,7 @@ Function Get-CheckpointVpnActiveUser
         Test-ModuleLoaded -RequiredModules $arrayModulesNeeded -Quiet
     }
     
-    Process 
-    {
+    Process {
         # Get active users 
         [String] $strCommand = 'fw tab -t userc_users -f'
     
@@ -93,17 +87,14 @@ Function Get-CheckpointVpnActiveUser
         $SshStream.WriteLine($strCommand) 
         $boolDataReceived = $false
         
-        :waiter While ($true)
-        {
+        :waiter While ($true) {
             $streamOut = $sshStream.Read() 
             
-            If ($boolDataReceived -eq $true -and $streamOut.Length -eq 0)
-            {
+            If ($boolDataReceived -eq $true -and $streamOut.Length -eq 0) {
                 break waiter
             }
             
-            If ($streamOut.Length -gt 0) 
-            {
+            If ($streamOut.Length -gt 0) {
                 $rawOutput += $streamOut
                 $streamOut = $null 
                 $boolDataReceived = $true # Watch until we do not receive data anymore
@@ -115,22 +106,18 @@ Function Get-CheckpointVpnActiveUser
         # Data
         $objOfHolding = @()
      
-        Foreach ($Thing in $( $rawOutput.Split("`n") | Select-String -Pattern ' :(+);' -SimpleMatch -AllMatches) ) 
-        {
+        Foreach ($Thing in $( $rawOutput.Split("`n") | Select-String -Pattern ' :(+);' -SimpleMatch -AllMatches) ) {
             $objBuilder = New-Object -TypeName PSObject
 
-            Foreach ($line in $Thing.ToString().Split(';'))
-            {
+            Foreach ($line in $Thing.ToString().Split(';')) {
                 $line = $line.Trim("^,")
 
-                If ($line -notmatch "^$|^\s")
-                {
+                If ($line -notmatch "^$|^\s") {
                     # Temp variables
                     $tmpName = $null
                     $tmpName = $line.Split(':')[0]
                     
-                    If ($tmpName.Trim() -eq 'ConnectTime')
-                    {
+                    If ($tmpName.Trim() -eq 'ConnectTime') {
                         $tmpName = $tmpName + '_UTC'
                         $tmpVal = $null
                         $tmpVal = $line.Split(':')[1]
@@ -140,8 +127,7 @@ Function Get-CheckpointVpnActiveUser
                         $tmpVal = $epoch.AddSeconds($tmpVal)
                     }
                     
-                    Else
-                    {
+                    Else {
                         $tmpVal = $null
                         $tmpVal = $line.Split(':')[1]
                     }
@@ -157,28 +143,24 @@ Function Get-CheckpointVpnActiveUser
             $objOfHolding += $objBuilder
         }
     
-        If (!($objOfHolding.Count -gt 0)) 
-        {
+        If (!($objOfHolding.Count -gt 0)) {
             Write-Host "`n"
             Write-Host 'No data returned. Try increasing the timeout. You may have a slow firewall :(' -ForegroundColor Red
             Write-Host "`n"
         }
         
-        Else
-        {
+        Else {
             $objOfHolding
         }
     }
     
-    End
-    {
+    End {
         $null = Remove-SSHSession -SessionId $($objSessionCheckpoint.SessionID) 
     }
 }
 
 
-Function Add-CheckpointSamDatabaseEntry
-{
+Function Add-CheckpointSamDatabaseEntry {
     <#
             .Synopsis
             Block an IP on your Checkpoint firewall
@@ -209,51 +191,48 @@ Function Add-CheckpointSamDatabaseEntry
                 [String] $Action, 
         #>                         # Currently only blocking
         
-        [Parameter(Mandatory=$true, Position=0,
-        HelpMessage='Firewall')]
+        [Parameter(Mandatory = $true, Position = 0,
+            HelpMessage = 'Firewall')]
         [String] $Server,
         
-        [Parameter(Mandatory=$true, Position=0,
-        HelpMessage='Destination IP we want to block')]
+        [Parameter(Mandatory = $true, Position = 0,
+            HelpMessage = 'Destination IP we want to block')]
         [Alias('host')]
         [String] $ThreatActor,
         
-        [Parameter(Position=1)]
-        [ValidateSet('10Minutes','Hour','Day','Week','Forever')]
+        [Parameter(Position = 1)]
+        [ValidateSet('10Minutes', 'Hour', 'Day', 'Week', 'Forever')]
         [String] $BlockTime = 'Hour',
         
-        [Parameter(Mandatory=$true, Position=2,
-        HelpMessage='Credentials to connect to your firewall')]
+        [Parameter(Mandatory = $true, Position = 2,
+            HelpMessage = 'Credentials to connect to your firewall')]
         [PSCredential] [System.Management.Automation.Credential()] $Credential
     )
     
-    Begin
-    {
+    Begin {
         # Debugging for scripts
         $Script:boolDebug = $PSBoundParameters.Debug.IsPresent
         
         # List of required modules for this function
         $arrayModulesNeeded = (
-            'Posh-SSH','core'
+            'Posh-SSH', 'core'
         )
         
         # Verify and load required modules
         Test-ModuleLoaded -RequiredModules $arrayModulesNeeded -Quiet
     }
     
-    Process
-    {
+    Process {
         # Variables
         $dicTime = @{
             '10Minutes' = 600
-            'Hour' = 3600
-            'Day' = 86400
-            'Week' = 604800
+            'Hour'      = 3600
+            'Day'       = 86400
+            'Week'      = 604800
         }
         [String] $strCommand = 'fw sam '
         
-        If (!($BlockTime -eq 'Forever'))
-        {
+        If (!($BlockTime -eq 'Forever')) {
             $strCommand += '-t {0} ' -f $dicTime[$BlockTime]
         }
         
@@ -269,51 +248,46 @@ Function Add-CheckpointSamDatabaseEntry
         $rawOutput = $sshStream.Read()
     }
     
-    End
-    {
+    End {
         $null = Remove-SSHSession -SessionId $($objSessionCheckpoint.SessionID)
     }
 }
 
 
-Function Set-CheckPointStaticRoute
-{
+Function Set-CheckPointStaticRoute {
     [CmdLetBinding()]
     Param
     (
-        [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true)]
         [IPAddress] $Network,
         
-        [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true)]
         [Alias('Netmask')]
         [IPAddress] $Mask,
         
-        [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName = $true)]
+        [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true)]
         [IPAddress] $Gateway,
         
-        [ValidateSet('on','off')]
+        [ValidateSet('on', 'off')]
         [String] $State = 'on',
         
-        [Parameter(Mandatory=$true, HelpMessage='IP or hostname of the firewall')]
+        [Parameter(Mandatory = $true, HelpMessage = 'IP or hostname of the firewall')]
         [String] $Firewall,
         
-        [Parameter(Mandatory=$true, HelpMessage='Creds for user with clish shell')]
+        [Parameter(Mandatory = $true, HelpMessage = 'Creds for user with clish shell')]
         [PSCredential] [System.Management.Automation.Credential()] $Credential,
         
         [Switch] $Force
     )
 
-    Process
-    {
+    Process {
     
         $strShell = Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential
     
-        Try
-        {
+        Try {
             $objAddr = IP-Calc -IPAddress $Network -Mask $Mask -WarningAction Stop -ErrorAction Stop
         }
-        Catch
-        {
+        Catch {
             Throw
             Return
         }
@@ -322,10 +296,9 @@ Function Set-CheckPointStaticRoute
         [String] $strCidr = $objAddr.PrefixLength.ToString()
     
         [String] $strCommand = 'set static-route {0}/{1} nexthop gateway address {2} {3}' -f `
-        $Network.IPAddressToString,$strCidr,$Gateway.IPAddressToString,$State
+            $Network.IPAddressToString, $strCidr, $Gateway.IPAddressToString, $State
     
-        If ($strShell -eq 'CliSH')
-        { 
+        If ($strShell -eq 'CliSH') { 
             $objSession = New-SSHSession -Credential $Credential -ComputerName $Firewall
 
             $retVal = Invoke-SSHCommand -SessionId $objSession.SessionId -Command $strCommand
@@ -335,8 +308,7 @@ Function Set-CheckPointStaticRoute
             # Clean up
             $null = Remove-SSHSession -SessionId $($objSession.SessionId) 
         }
-        Else
-        {
+        Else {
             Write-Error -Message "`nThis command requires SuperShell (CliSH) as the default. You're using $strShell `n"
             Return
         }
@@ -344,49 +316,45 @@ Function Set-CheckPointStaticRoute
 }
 
 
-Function Get-CheckPointRouteTable
-{
+Function Get-CheckPointRouteTable {
     [CmdLetBinding()]
     Param
     (
-        [Parameter(Mandatory=$true, ValueFromPipeline = $True, ValueFromPipelineByPropertyName = $True,
-        HelpMessage='IP or hostname of the firewall')]
+        [Parameter(Mandatory = $true, ValueFromPipeline = $True, ValueFromPipelineByPropertyName = $True,
+            HelpMessage = 'IP or hostname of the firewall')]
         [String] $Firewall,
         
-        [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName = $True,
-        HelpMessage='Creds for user with clish shell')]
+        [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $True,
+            HelpMessage = 'Creds for user with clish shell')]
         [PSCredential] [System.Management.Automation.Credential()] $Credential
     )
     
-    Begin
-    {
-        Function ConvertFrom-ShowRoute ($InputObject)
-        {
+    Begin {
+        Function ConvertFrom-ShowRoute ($InputObject) {
             $strReMatch = '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'
             
-            $routes = $InputObject -match $strReMatch -replace " `+|, ",' '
+            $routes = $InputObject -match $strReMatch -replace " `+|, ", ' '
 
             $objRoutes = @()
 
             $dicTypes = @{
-                'C' = 'Connected'
-                'S' = 'Static'
-                'R' = 'RIP'
-                'B' = 'BGP'
-                'D' = 'Default'
-                'U' = 'Unreachable'
-                'i' = 'Inactive'
-                'K' = 'Kernel'
-                'H' = 'Hidden'
-                'P' = 'Suppressed'
+                'C'    = 'Connected'
+                'S'    = 'Static'
+                'R'    = 'RIP'
+                'B'    = 'BGP'
+                'D'    = 'Default'
+                'U'    = 'Unreachable'
+                'i'    = 'Inactive'
+                'K'    = 'Kernel'
+                'H'    = 'Hidden'
+                'P'    = 'Suppressed'
                 'O IA' = 'OSPF InterArea'
-                'O E' = 'OSPF External'
-                'O N' = 'OSPF NSSA'
-                'A' = 'Aggregate'
+                'O E'  = 'OSPF External'
+                'O N'  = 'OSPF NSSA'
+                'A'    = 'Aggregate'
             }
 
-            Foreach ($route in $routes)
-            {
+            Foreach ($route in $routes) {
                 
                 # Define all object members
                 $strType = $dicTypes[$($route.Split(' ').Trim()[0])]
@@ -395,19 +363,16 @@ Function Get-CheckPointRouteTable
 
                 [IPAddress] $Network = $objNetwork.IP
 
-                If ($objNetwork.IP -eq '0.0.0.0')
-                {
+                If ($objNetwork.IP -eq '0.0.0.0') {
                     $strType = 'Default'
                     [IPAddress] $Netmask = $Network
                 }
-                Else
-                {
+                Else {
                     [IPAddress] $Netmask = $objNetwork.Mask
                 }
 
                 #     
-                IF ($strType -eq 'Connected')
-                {
+                IF ($strType -eq 'Connected') {
                     [IPAddress] $Gateway = $Network
 
                     [String] $Interface = $route.Split(' ').Trim()[5]
@@ -416,8 +381,7 @@ Function Get-CheckPointRouteTable
 
                     [Int] $Age = 0
                 }
-                Else
-                {
+                Else {
                     [IPAddress] $Gateway = $route.Split(' ').Trim()[3]
 
                     [String] $Interface = $route.Split(' ').Trim()[4]
@@ -453,13 +417,11 @@ Function Get-CheckPointRouteTable
         }
     }
     
-    Process
-    {
+    Process {
         # Need to figure out which shell we're working with
         $strShell = Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential
         
-        If ($strShell -eq 'CliSH')
-        {
+        If ($strShell -eq 'CliSH') {
             [String] $strCommand = 'show route'
 
             $objSession = New-SSHSession -Credential $Credential -ComputerName $Firewall
@@ -468,8 +430,7 @@ Function Get-CheckPointRouteTable
 
             $objRoutes = ConvertFrom-ShowRoute $retVal.Output
         }
-        Else
-        {
+        Else {
             Write-Error -Message "`nThis command requires SuperShell (CliSH). You're using $strShell `n"
             Return
         }
@@ -480,8 +441,7 @@ Function Get-CheckPointRouteTable
         $objRoutes
     }
 
-    End
-    {
+    End {
         
     }
 }
@@ -496,8 +456,7 @@ New-Alias -Name Get-CheckpointVpnActiveUsers -Value Get-CheckpointVpnActiveUser 
 #region Bulk import commands
 
 
-Function New-CheckPointImportFile 
-{ 
+Function New-CheckPointImportFile { 
     # Build a clean import list for Checkpoint network objects from a CSV file
     <#
             CSV Headers
@@ -511,7 +470,7 @@ Function New-CheckPointImportFile
         [String] $OutputFile = ".\$(Get-Date -UFormat '%Y%m%d-%H%M%S')-dbedit-import.txt",
         
         [Parameter(Mandatory = $True, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, HelpMessage = 'Credentials with bash shell')]
@@ -526,7 +485,8 @@ Function New-CheckPointImportFile
     $boolDebug = $true
 
     # Private functions:
-    function createNetworkObject ([String] $Name, [String] $Color, [String] $Comments, [String] $IP, [String] $Netmask, [String] $Group) { # Output code to create network object
+    function createNetworkObject ([String] $Name, [String] $Color, [String] $Comments, [String] $IP, [String] $Netmask, [String] $Group) {
+        # Output code to create network object
         $arrayCollectionOutput.Add("create network $Name")
         $arrayCollectionOutput.Add("modify network_objects $Name ipaddr $IP")
         $arrayCollectionOutput.Add("modify network_objects $Name netmask $Netmask")
@@ -537,7 +497,8 @@ Function New-CheckPointImportFile
         #$arrayCollectionOutput.Add("update network_objects $Group")
     }
 	
-    function createHostObject ([String] $Name, [String] $Color, [String] $Comments, [String] $IP, [String] $Group) { # Output code to create a host object 
+    function createHostObject ([String] $Name, [String] $Color, [String] $Comments, [String] $IP, [String] $Group) {
+        # Output code to create a host object 
         $arrayCollectionOutput.Add("create host_plain $Name")
         $arrayCollectionOutput.Add("modify network_objects $Name ipaddr $IP")
         $arrayCollectionOutput.Add("modify network_objects $Name color `"$Color`"")
@@ -547,20 +508,23 @@ Function New-CheckPointImportFile
         #$arrayCollectionOutput.Add("update network_objects $Group")
     }
 	
-    function createGroupObject ([String] $Name, [String] $Color, [String] $Comments) { # Output code to create a group object 
+    function createGroupObject ([String] $Name, [String] $Color, [String] $Comments) {
+        # Output code to create a group object 
         $arrayCollectionOutput.Add("create network_object_group $Name")
         $arrayCollectionOutput.Add("modify network_objects $Name color `"$Color`"")
         #$arrayCollectionOutput.Add("update network_objects $Name")
     }
 	
 	
-    if ($Firewall.length -gt 0) { # Check if we'll be comparing the our items against the current firewall configuration.
+    if ($Firewall.length -gt 0) {
+        # Check if we'll be comparing the our items against the current firewall configuration.
         # Make the credential parameter required.
         if ($Credential.UserName.Length -gt 0) { 
             $boolShouldContinue = $true
             $boolCheckFirewall = $true
             #If ($boolDebug -eq $true) {Write-Host "Firewall is set to $Firewall"}
-        }else {
+        }
+        else {
             # $boolShouldContinue = $false
         }
     }
@@ -576,7 +540,8 @@ Function New-CheckPointImportFile
         # Import the CSV file for getting the data
         #If ($boolDebug -eq $true) {Write-Host "Imported the CSV file"}
 		
-        foreach ($line in $objImportFile) { # Loop through the lines in the CSV, and create the output collection
+        foreach ($line in $objImportFile) {
+            # Loop through the lines in the CSV, and create the output collection
             # Variables
             $strObjectName = $($line.Name).Trim()
             $strObjectIP = $($line.IP).Trim()
@@ -591,15 +556,18 @@ Function New-CheckPointImportFile
 		
             # Figure out what kind of object we're working with and build the list.
             switch ($strObjectType) {
-                host_plain { # Run the createHostObject function.
+                host_plain {
+                    # Run the createHostObject function.
                     createHostObject -Name $strObjectName -Color $strObjectColor -Comments $strObjectComment -IP $strObjectIP -Group $strObjectGroup | Out-Null
                     break
                 }  
-                network { # Run the createNetworkObject function 
+                network {
+                    # Run the createNetworkObject function 
                     createNetworkObject -Name $strObjectName -Color $strObjectColor -Comments $strObjectComment -IP $strObjectIP -Netmask $strObjectMask -Group $strObjectGroup | Out-Null
                     break
                 } 
-                network_object_group { # Run the createGroupObject function 
+                network_object_group {
+                    # Run the createGroupObject function 
                     createGroupObject -Name $strObjectName -Color $strObjectColor -Comments $strObjectComment | Out-Null
                     break
                 }
@@ -609,14 +577,15 @@ Function New-CheckPointImportFile
         } #If ($boolDebug -eq $true) {Write-Host "Finished creating all objects"}
 		
         # Clean up the list, if we need to compare to existing firewall output. 
-        if ($boolCheckFirewall -eq $true) { # Compare and order objects. Create all groups first if they don't exist.
+        if ($boolCheckFirewall -eq $true) {
+            # Compare and order objects. Create all groups first if they don't exist.
 			
             # Build the list of groups from our array. 
-            $arrayGroupNames = $arrayCollectionOutput.Group |Sort-Object -Unique
+            $arrayGroupNames = $arrayCollectionOutput.Group | Sort-Object -Unique
             #If ($boolDebug -eq $true) {Write-Host "**** Unique group names ****"$arrayGroupNames}
 				
-            $arrayHostNames = $arrayCollectionOutput |Where-Object {$_.Type -eq 'plain_host'} | ForEach-Object {$_.Name}
-            $arrayNetworkNames = $arrayCollectionOutput |Where-Object {$_.Type -eq 'network'} | ForEach-Object {$_.Name}
+            $arrayHostNames = $arrayCollectionOutput | Where-Object { $_.Type -eq 'plain_host' } | ForEach-Object { $_.Name }
+            $arrayNetworkNames = $arrayCollectionOutput | Where-Object { $_.Type -eq 'network' } | ForEach-Object { $_.Name }
 			
             # Build an array for cleaned list of items to create. 
             [System.Collections.ArrayList] $arrayCleanedOutput = $arrayCollectionOutput
@@ -625,21 +594,24 @@ Function New-CheckPointImportFile
 			
             # Remove any host or network objects that were found in the firewall output.
             foreach ($line in $ArrayCurrentFirewallObjects) { 
-                foreach ($record in $($arrayCleanedOutput |Select-String "$line")) {
+                foreach ($record in $($arrayCleanedOutput | Select-String "$line")) {
                     $arrayCleanedOutput.Remove($record.ToString())
 					
                     #If ($boolDebug -eq $true) {Write-Host "Removing: $record"}
                 }
             }
 			
-            foreach ($Group in $arrayGroupNames) { # Check if the groups already exist 
+            foreach ($Group in $arrayGroupNames) {
+                # Check if the groups already exist 
                 # Add to the collection array if missing from firewall array.
-                if ($ArrayCurrentFirewallObjects.Contains("$Group") -eq $false) {$arrayGroupsToCreate.Add("$Group")}
+                if ($ArrayCurrentFirewallObjects.Contains("$Group") -eq $false) { $arrayGroupsToCreate.Add("$Group") }
             }
 
-            if ($arrayGroupsToCreate.Count -gt 0) { # Do we have any groups to create?
-                foreach ($Group in $arrayGroupsToCreate) { # Lookup the object in the array, and pump this out to the proper function
-                    $objTempGroup = $objImportFile |Where-Object {$_.Group -eq "$Group"} |Select-Object -First 1
+            if ($arrayGroupsToCreate.Count -gt 0) {
+                # Do we have any groups to create?
+                foreach ($Group in $arrayGroupsToCreate) {
+                    # Lookup the object in the array, and pump this out to the proper function
+                    $objTempGroup = $objImportFile | Where-Object { $_.Group -eq "$Group" } | Select-Object -First 1
                     $arrayCleanedOutput.Add("create network_object_group $Group")
                     $arrayCleanedOutput.Add("modify network_objects $Group color `"$($objTempGroup.Color)`"")
                     #$arrayCollectionOutput.Add("update network_objects $Group")
@@ -653,10 +625,11 @@ Function New-CheckPointImportFile
         # Create the output file if it doesn't exist. 
         Invoke-Touch -Path $OutputFile | Out-Null
 		
-        if ($boolCheckFirewall -eq $true -and $arrayCleanedOutput.Count -gt 0) { # Output the cleaned file
+        if ($boolCheckFirewall -eq $true -and $arrayCleanedOutput.Count -gt 0) {
+            # Output the cleaned file
             $CleanOutFile = "Cleaned-$(Get-ChildItem $OutputFile | ForEach-Object{$_.Name})"
             Invoke-Touch -Path $CleanOutFile | Out-Null
-            $CleanOutFile = Get-ChildItem $CleanOutFile | ForEach-Object{$_.FullName}
+            $CleanOutFile = Get-ChildItem $CleanOutFile | ForEach-Object { $_.FullName }
 			
             # Write the output to the cleaned file 
             [System.IO.File]::WriteAllLines($CleanOutFile, ($arrayCleanedOutput))
@@ -666,7 +639,7 @@ Function New-CheckPointImportFile
         }
 		
         # Get the full name of the file 
-        $Outputfile = Get-ChildItem $Outputfile |ForEach-Object{$_.FullName}
+        $Outputfile = Get-ChildItem $Outputfile | ForEach-Object { $_.FullName }
         # System.IO.File works from your home directory. 
 		
         # Output the collection to the output file 
@@ -684,8 +657,7 @@ Function New-CheckPointImportFile
 }
 
 
-Function Import-CheckPointBulkObject 
-{ 
+Function Import-CheckPointBulkObject { 
     # Checkpoint Firewall object import tool
     # Import a network objects file into the CheckPoint database. Provisioning just got easy son!!!
 
@@ -695,7 +667,7 @@ Function Import-CheckPointBulkObject
         [PSCredential] [System.Management.Automation.Credential()] $Credential, 
         
         [Parameter(Mandatory = $True, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall, 
         
         [Parameter(Mandatory = $True, HelpMessage = 'Input file')]
@@ -707,8 +679,8 @@ Function Import-CheckPointBulkObject
     )
 	
     # Variables:
-    if ($RemotePath.Length -lt 1) {$RemotePath = "/home/$($Credential.UserName.ToString())"}
-    $strFileName = Get-ChildItem $InputFile | ForEach-Object{$_.Name}
+    if ($RemotePath.Length -lt 1) { $RemotePath = "/home/$($Credential.UserName.ToString())" }
+    $strFileName = Get-ChildItem $InputFile | ForEach-Object { $_.Name }
     $strDBeditBatchCommand = "dbedit -local -f $($RemotePath + '/' + $strFileName) -continue_updating"
 	
     # Copy our import file to the firewall 
@@ -720,12 +692,10 @@ Function Import-CheckPointBulkObject
     # Run the script file via dbedit on the firewall 
     $retVal = Invoke-SSHCommand -SessionId $objSession.SessionId -Command "$strDBeditBatchCommand"
     
-    If ($retVal.ExitStatus -ne 0)
-    {
+    If ($retVal.ExitStatus -ne 0) {
         $retVal
     }
-    Else
-    {
+    Else {
         $retVal.ExitStatus
     }
 	
@@ -740,8 +710,7 @@ Function Import-CheckPointBulkObject
 #region Network objects
 
 
-Function Export-CheckPointNetworkConfig 
-{ 
+Function Export-CheckPointNetworkConfig { 
     # used to get a list of all objects from the network_objects table via dbedit.
     # TODO: 
     # Check if requirements are present
@@ -758,7 +727,7 @@ Function Export-CheckPointNetworkConfig
     Param
     (
         [Parameter(Mandatory = $True, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, HelpMessage = 'Credentials with bash shell')]
@@ -770,7 +739,7 @@ Function Export-CheckPointNetworkConfig
         [String] $Filter,
         
         [Parameter(DontShow)]
-        [ValidateSet('network_objects','services')]
+        [ValidateSet('network_objects', 'services')]
         [String] $Table = 'network_objects'
     )
 	
@@ -793,10 +762,9 @@ Function Export-CheckPointNetworkConfig
     
     # Checkpoint doesn't know how to do XML, so have to fix...
     [xml] $objFirewallDump = '<objects>' + "`n" + $(Invoke-SSHCommand -SessionId $objSession.SessionId -Command "$strSshDumpCommand" | 
-    ForEach-Object {$_.output}) + "`n" + '</objects>'
+        ForEach-Object { $_.output }) + "`n" + '</objects>'
 	
-    If ($ReturnPsObject)
-    {
+    If ($ReturnPsObject) {
         $bucket = @()
         
         [String] $strEntryElement = $null
@@ -804,31 +772,25 @@ Function Export-CheckPointNetworkConfig
         If ($Table -eq 'network_objects') { $strEntryElement = 'network_objects_object' }
         If ($Table -eq 'services') { $strEntryElement = 'services_object' }
         
-        If ($Filter)
-        {
+        If ($Filter) {
             $objSearch = ($objFirewallDump | Select-Xml -XPath "(/objects/$strEntryElement[contains(text(), '$Filter')])").Node
             #($objFirewallDump | Select-Xml -XPath "//network_objects_object[text()='$Filter']").Node
         }
-        Else
-        {
+        Else {
             $objSearch = $objFirewallDump.objects.$strEntryElement
         }
         
-        Foreach ($obj in $objSearch)
-        {
+        Foreach ($obj in $objSearch) {
             $props = $obj | Get-Member -MemberType Property
             
             $objBuilder = New-Object -TypeName PSObject
             $objBuilder | Add-Member -MemberType NoteProperty -Name 'Name' -Value $obj.'#text'.Trim()
             
-            Foreach ($prop in $props)
-            {
-                If (($obj.$($prop.Name) | Get-Member -MemberType Property | ForEach-Object Name) -eq '#cdata-section')
-                {
+            Foreach ($prop in $props) {
+                If (($obj.$($prop.Name) | Get-Member -MemberType Property | ForEach-Object Name) -eq '#cdata-section') {
                     $strValue = $obj.$($prop.Name).'#cdata-section'.Trim()
                 }
-                Else
-                {
+                Else {
                     $strValue = $obj.$($prop.Name)
                 }
                 
@@ -840,8 +802,7 @@ Function Export-CheckPointNetworkConfig
         
         $bucket
     }
-    Else
-    {
+    Else {
         $objFirewallDump
     }
     
@@ -850,26 +811,23 @@ Function Export-CheckPointNetworkConfig
 }
 
 
-Function Get-CheckPointNetworkObject
-{
+Function Get-CheckPointNetworkObject {
     Param
     (
         [Parameter(Mandatory = $True, Position = 0, HelpMessage = 'Name of network object',
-        ValueFromPipelineByPropertyName = $True, ValueFromPipeline = $True)]
+            ValueFromPipelineByPropertyName = $True, ValueFromPipeline = $True)]
         [String[]] $Name,
         
         [Parameter(Mandatory = $True, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, HelpMessage = 'Credentials with bash shell')]
         [PSCredential] [System.Management.Automation.Credential()] $Credential
     )
     
-    Process
-    {
-        Foreach ($obj in $Name)
-        {
+    Process {
+        Foreach ($obj in $Name) {
             $Config = Export-CheckPointNetworkConfig -Firewall $Firewall -Credential $Credential -ReturnPsObject -Filter $obj
     
     
@@ -879,31 +837,30 @@ Function Get-CheckPointNetworkObject
 }
 
 
-Function New-CheckPointNetworkObject  
-{
+Function New-CheckPointNetworkObject {
  
     [CmdLetBinding()]
     Param 
     (
         [Parameter(Mandatory = $True, Position = 0, HelpMessage = 'Name of network object',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Name, 
         
         [Parameter(Mandatory = $True, Position = 1, HelpMessage = 'Subnet address',
-        ValueFromPipelineByPropertyName = $True)]
-        [Alias('ipaddr','IPv4Address')]
+            ValueFromPipelineByPropertyName = $True)]
+        [Alias('ipaddr', 'IPv4Address', 'IPAddress')]
         [IPAddress] $IP, 
         
         [Parameter(Mandatory = $True, Position = 2, HelpMessage = 'Netmask for the subnet',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [Alias('Mask')]
         [String] $Netmask, 
         
         [Parameter(Position = 3, ValueFromPipelineByPropertyName = $True)]
         [ValidateSet(
-                "aquamarine1","black","blue","burlywood4","dark orchid","darkseagreen3",
-                "deepskyblue1","dodgerblue3","gray90","light coral","medium orchid",
-                "medium slate blue","olive drab","orange","red","sienna"
+            "aquamarine1", "black", "blue", "burlywood4", "dark orchid", "darkseagreen3",
+            "deepskyblue1", "dodgerblue3", "gray90", "light coral", "medium orchid",
+            "medium slate blue", "olive drab", "orange", "red", "sienna"
         )][String] $Color, 
         
         [Parameter(Position = 4, ValueFromPipelineByPropertyName = $True)]
@@ -911,7 +868,7 @@ Function New-CheckPointNetworkObject
         [String] $Comment,
         
         [Parameter(Mandatory = $True, Position = 5, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, Position = 6, HelpMessage = 'Credentials with bash shell')]
@@ -920,17 +877,14 @@ Function New-CheckPointNetworkObject
         [Int] $Port = 22
     )
     
-    Begin
-    {
-        If (!((Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential) -match 'bash'))
-        {
+    Begin {
+        If (!((Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential) -match 'bash')) {
             Write-Error -Message ('Wrong shell for user: {0}' -f $Credential.UserName)
             Return
         }
     }
     
-    Process
-    {
+    Process {
         # Create our configuration file
 
         $guid = [GUID]::NewGuid().guid
@@ -949,7 +903,7 @@ Function New-CheckPointNetworkObject
         Invoke-Touch -Path $OutputFile -Quiet | Out-Null
 		
         # Get the full name of the file 
-        $Outputfile = Get-ChildItem -Path $Outputfile | ForEach-Object {$_.FullName}
+        $Outputfile = Get-ChildItem -Path $Outputfile | ForEach-Object { $_.FullName }
         
         # Output the collection to the output file 
         [System.IO.File]::WriteAllLines($OutputFile, ($arrayCollectionOutput)) | Out-Null 
@@ -964,22 +918,21 @@ Function New-CheckPointNetworkObject
 }
 
 
-Function New-CheckPointHostObject  
-{
+Function New-CheckPointHostObject {
     [CmdLetBinding()]
     Param 
     (
         [Parameter(Mandatory = $True, Position = 0, HelpMessage = 'Name of network object',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Name, 
         
         [Parameter(Mandatory = $True, Position = 1, HelpMessage = 'Subnet address',
-        ValueFromPipelineByPropertyName = $True)]
-        [Alias('ipaddr','IPv4Address','IPAddress')]
+            ValueFromPipelineByPropertyName = $True)]
+        [Alias('ipaddr', 'IPv4Address', 'IPAddress')]
         [IPAddress] $IP,
         
         [Parameter(Mandatory = $True, Position = 3, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, Position = 4, HelpMessage = 'Credentials with bash shell')]
@@ -989,9 +942,9 @@ Function New-CheckPointHostObject
         
         [Parameter(Position = 5, ValueFromPipelineByPropertyName = $True)]
         [ValidateSet(
-                "aquamarine1","black","blue","burlywood4","dark orchid","darkseagreen3",
-                "deepskyblue1","dodgerblue3","gray90","light coral","medium orchid",
-                "medium slate blue","olive drab","orange","red","sienna"
+            "aquamarine1", "black", "blue", "burlywood4", "dark orchid", "darkseagreen3",
+            "deepskyblue1", "dodgerblue3", "gray90", "light coral", "medium orchid",
+            "medium slate blue", "olive drab", "orange", "red", "sienna"
         )][String] $Color, 
         
         [Parameter(Position = 6, ValueFromPipelineByPropertyName = $True)]
@@ -999,17 +952,14 @@ Function New-CheckPointHostObject
         [String] $Comment
     )
     
-    Begin
-    {
-        If (!((Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential) -match 'bash'))
-        {
+    Begin {
+        If (!((Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential) -match 'bash')) {
             Write-Error -Message ('Wrong shell for user: {0}' -f $Credential.UserName)
             Return
         }
     }
     
-    Process
-    {
+    Process {
         $guid = [GUID]::NewGuid().guid
         $OutputFile = $env:TEMP + '\' + $guid + '.dbedit'
     
@@ -1031,7 +981,7 @@ Function New-CheckPointHostObject
         Invoke-Touch -Path $OutputFile -Quiet | Out-Null
 		
         # Get the full name of the file 
-        $Outputfile = Get-ChildItem -Path $Outputfile | ForEach-Object {$_.FullName}
+        $Outputfile = Get-ChildItem -Path $Outputfile | ForEach-Object { $_.FullName }
         
         # Output the collection to the output file 
         [System.IO.File]::WriteAllLines($OutputFile, ($arrayCollectionOutput)) | Out-Null 
@@ -1046,20 +996,19 @@ Function New-CheckPointHostObject
 }
 
 
-Function New-CheckPointGroupObject  
-{
+Function New-CheckPointGroupObject {
     [CmdLetBinding()]
     Param 
     (
         [Parameter(Mandatory = $True, Position = 0, HelpMessage = 'Name of network object',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Name, 
         
         [Parameter(Position = 1, ValueFromPipelineByPropertyName = $True)]
         [ValidateSet(
-                "aquamarine1","black","blue","burlywood4","dark orchid","darkseagreen3",
-                "deepskyblue1","dodgerblue3","gray90","light coral","medium orchid",
-                "medium slate blue","olive drab","orange","red","sienna"
+            "aquamarine1", "black", "blue", "burlywood4", "dark orchid", "darkseagreen3",
+            "deepskyblue1", "dodgerblue3", "gray90", "light coral", "medium orchid",
+            "medium slate blue", "olive drab", "orange", "red", "sienna"
         )][String] $Color, 
         
         [Parameter(Position = 2, ValueFromPipelineByPropertyName = $True)]
@@ -1067,7 +1016,7 @@ Function New-CheckPointGroupObject
         [String] $Comment,
         
         [Parameter(Mandatory = $True, Position = 3, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, Position = 4, HelpMessage = 'Credentials with bash shell')]
@@ -1076,17 +1025,14 @@ Function New-CheckPointGroupObject
         [Int] $Port = 22
     )
     
-    Begin
-    {
-        If (!((Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential) -match 'bash'))
-        {
+    Begin {
+        If (!((Get-CheckPointActiveShell -Firewall $Firewall -Credential $Credential) -match 'bash')) {
             Write-Error -Message ('Wrong shell for user: {0}' -f $Credential.UserName)
             Return
         }
     }
     
-    Process
-    {
+    Process {
         # Create our configuration file
 
         $guid = [GUID]::NewGuid().guid
@@ -1103,7 +1049,7 @@ Function New-CheckPointGroupObject
         Invoke-Touch -Path $OutputFile -Quiet | Out-Null
 		
         # Get the full name of the file 
-        $Outputfile = Get-ChildItem -Path $Outputfile | ForEach-Object {$_.FullName}
+        $Outputfile = Get-ChildItem -Path $Outputfile | ForEach-Object { $_.FullName }
         
         # Output the collection to the output file 
         [System.IO.File]::WriteAllLines($OutputFile, ($arrayCollectionOutput)) | Out-Null 
@@ -1118,14 +1064,12 @@ Function New-CheckPointGroupObject
 }
 
 
-Function Get-CheckPointGroupObject
-{
+Function Get-CheckPointGroupObject {
 
 }
 
 
-Function Add-CheckPointObjectToGroup
-{
+Function Add-CheckPointObjectToGroup {
     Param
     (
         [Parameter(Mandatory = $True, Position = 0, ValueFromPipelineByPropertyName = $True)]
@@ -1135,7 +1079,7 @@ Function Add-CheckPointObjectToGroup
         [String] $Group,
         
         [Parameter(Mandatory = $True, Position = 2, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, Position = 3, HelpMessage = 'Credentials with bash shell')]
@@ -1144,14 +1088,13 @@ Function Add-CheckPointObjectToGroup
         [Int] $Port = 22
     )
     
-    Process
-    {
+    Process {
         $guid = [GUID]::NewGuid().guid
         $strTempFile = $env:TEMP + '\' + $guid + '.dbedit'
     
         Invoke-Touch -Path $strTempFile -Quiet
     
-        $InputFile = Get-ChildItem -Path $strTempFile | ForEach-Object {$_.FullName}
+        $InputFile = Get-ChildItem -Path $strTempFile | ForEach-Object { $_.FullName }
     
         [System.Collections.ArrayList] $arrayCollectionOutput = @()
  
@@ -1172,17 +1115,16 @@ Function Add-CheckPointObjectToGroup
 
 
 
-Function Search-CheckPointWhereUsed
-{
+Function Search-CheckPointWhereUsed {
     Param
     (
         [String] $Name,
         
-        [ValidateSet('network_objects','services')]
+        [ValidateSet('network_objects', 'services')]
         [String] $Table = 'network_objects',
         
         [Parameter(Mandatory = $True, HelpMessage = 'Checkpoint Firewall',
-        ValueFromPipelineByPropertyName = $True)]
+            ValueFromPipelineByPropertyName = $True)]
         [String] $Firewall,
         
         [Parameter(Mandatory = $True, HelpMessage = 'Credentials with bash shell')]
@@ -1201,7 +1143,7 @@ Function Search-CheckPointWhereUsed
     
     Invoke-Touch -Path $strTempFile -Quiet
     
-    $InputFile = Get-ChildItem -Path $strTempFile | ForEach-Object {$_.FullName}
+    $InputFile = Get-ChildItem -Path $strTempFile | ForEach-Object { $_.FullName }
     
     [System.Collections.ArrayList] $arrayCollectionOutput = @()
  
